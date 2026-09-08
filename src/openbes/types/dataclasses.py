@@ -311,6 +311,7 @@ class OpenBESSpecification:
     lighting_control: Optional[LIGHTING_CONTROL] = field(
         default=None, metadata={"cls": LIGHTING_CONTROL}
     )
+    lighting_load: Optional[float] = None  # not yet consumed by lighting simulation
     lighting_off_time: Optional[float] = None
     lighting_on_time: Optional[float] = None
     lighting_simultaneity_factor: Optional[float] = 0.2

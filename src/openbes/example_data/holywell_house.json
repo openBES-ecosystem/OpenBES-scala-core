@@ -323,8 +323,8 @@
       "nominal_capacity": 48.0,
       "count": 2,
       "active_hours": {
-        "start": 17,
-        "end": 8
+        "start": 8,
+        "end": 17
       },
       "simultaneity": {
         "Office area": 1.0,

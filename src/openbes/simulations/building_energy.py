@@ -88,7 +88,7 @@ class BuildingEnergySimulation(EnergyUseSimulation):
     - Heating
     - Cooling
 
-    Some simulations depend up on others, meaing they can be executed in the following order:
+    Some simulations depend up on others, meaning they can be executed in the following order:
     0: Geometry, Occupancy, Solar Radiation
     1: Ventilation, Lighting, Hot Water
     2: Thermal

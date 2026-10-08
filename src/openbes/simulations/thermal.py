@@ -176,6 +176,17 @@ class ThermalSimulation(HourlySimulation):
     vectorized calculations. To mitigate this, the core loop is implemented in a JIT-compiled function.
     Unlike the rest of our codebase, the thermal simulation prioritizes performance over interpretability,
     meaning we use Numpy arrays rather than Pandas Series/DataFrames for intermediate calculations.
+
+    HM - 08/10/2026
+
+    HM WIP - Adding changes to roof shading to test ease of adding cooling interventions
+    1) Adding roof_solar_factor to the __init__() method
+    2) in @property def solar_heat_roof(self): changing Fsh_ob = 1 to Fsh_ob = self._roof_solar_factor
+    This step will connect the roof shading intervention to the simulation
+
+    HM WIP - The above is a simple change to see if the intervention can be added, and to test if the constructed
+    wrapper 'scenario_comparison.py' works to compare results between a no-intervention scenario and an intervention.
+
     """
     geometry: BuildingGeometry
     occupancy: OccupationSimulation
@@ -205,7 +216,19 @@ class ThermalSimulation(HourlySimulation):
         lighting: LightingSimulation = None,
         ventilation: VentilationSimulation = None,
         location: LocationSimulation = None,
+        *, #HM WIP - means new argument to be supplied by name
+        roof_solar_factor: float = 1.0,
+
     ):
+        """
+        HM WIP - new roof solar factor part to constructor
+        Rejects values outside 0 and 1. self._roof_solar_factor stores value on particular simulation
+
+        """
+        if not 0.0 <= roof_solar_factor <= 1.0:
+            raise ValueError("roof_solar_factor must be between 0 and 1")
+        self._roof_solar_factor = roof_solar_factor
+
         """
         Unlike other simulations, ThermalSimulation's Hourly data depend on the previous hourly data.
         This means that the class must calculate all hourly data in sequence, not just on demand.
@@ -1191,12 +1214,14 @@ class ThermalSimulation(HourlySimulation):
     def solar_heat_roof(self):
         """Calculate solar heat gains through roof surfaces in W.
         HOR [Hourly Simulation column LS]
+
+        HM WIP - Changing Fsh_ob = 1  # [Hardcoded in LS95 ISO 13790, 11.4.4] to Fsh_ob = self._roof_solar_factor
         """
         absorption = self.spec.parameters.roof_absorption_coefficient  # LS78
         view_factor = self.spec.parameters.view_factor_to_sky_roof  # LS80
         hr = 5 * self.spec.parameters.facade_emissivity  # [LS81 via Inputs E224]
         delta_theta_er = 11  # [Hardcoded in LK82: ISO 13790, 11.4.6]
-        Fsh_ob = 1  # [Hardcoded in LS95 ISO 13790, 11.4.4]
+        Fsh_ob = self._roof_solar_factor
         u_value = self.spec.uvalue_roof  # LS104
         area = self.geometry.roof_projections.sum()  # LS105
         rse = self.rse  # KU

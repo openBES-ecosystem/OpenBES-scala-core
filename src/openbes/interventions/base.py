@@ -4,10 +4,10 @@
 Code from chatgpt model
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
-from openbes.types import OpenBESSpecification
+from openbes.types import COMPASS_POINTS, OpenBESSpecification
 
 @dataclass
 class ScenarioInputs:
@@ -17,6 +17,13 @@ class ScenarioInputs:
     """
     spec: OpenBESSpecification
     roof_solar_factor:float = 1.0
+
+    # Factor applied to all opaque facades
+    wall_solar_factor:float = 1.0
+
+    # Additional factors applied to selected facade directions
+    # default_factory = dict creates a separate empty dictionary for every scenario
+    wall_solar_factors: dict[COMPASS_POINTS, float] = field(default_factory=dict)
 
 class Intervention(Protocol):
     """An intervention must provide an apply() method

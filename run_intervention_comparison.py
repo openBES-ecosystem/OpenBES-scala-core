@@ -21,6 +21,11 @@ from openbes.interventions.roof_shading import FixedRoofShade
 # These are the scenario definition and comparison wrapper.
 from openbes.scenario_comparison import Scenario, compare_interventions
 
+from openbes.simulations.geometry import BuildingGeometry
+from openbes.types import ORIENTATIONS
+
+from openbes.interventions,wall_shading import FixedWallShade
+
 
 # Find the folder containing this driver script.
 PROJECT_ROOT = Path(__file__).resolve().parent

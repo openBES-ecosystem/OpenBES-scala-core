@@ -187,6 +187,10 @@ class ThermalSimulation(HourlySimulation):
     HM WIP - The above is a simple change to see if the intervention can be added, and to test if the constructed
     wrapper 'scenario_comparison.py' works to compare results between a no-intervention scenario and an intervention.
 
+    HM - 12/10/2026
+    HM WIP - Adding changes to wall shading to test interaction of interventions (roof + wall shading)
+
+
     """
     geometry: BuildingGeometry
     occupancy: OccupationSimulation
@@ -218,6 +222,8 @@ class ThermalSimulation(HourlySimulation):
         location: LocationSimulation = None,
         *, #HM WIP - means new argument to be supplied by name
         roof_solar_factor: float = 1.0,
+        wall_solar_factor: float = 1.0,
+        wall_solar_factors: dict[COMPASS_POINTS, float] | None = None,
 
     ):
         """
@@ -228,6 +234,23 @@ class ThermalSimulation(HourlySimulation):
         if not 0.0 <= roof_solar_factor <= 1.0:
             raise ValueError("roof_solar_factor must be between 0 and 1")
         self._roof_solar_factor = roof_solar_factor
+
+        if not 0.0 <= wall_solar_factor <= 1.0:
+            raise ValueError("wall_solar_factor must be between 0 and 1")
+        self._wall_solar_factor = wall_solar_factor
+
+        # Copy supplied mapping so simulation owns its dictionary
+        self._wall_solar_factors = dict(wall_solar_factors or {})
+
+        for point, factor in self._wall_solar_factors.items():
+            if not isinstance(point, COMPASS_POINTS):
+                raise TypeError(
+                    "wall_solar_factors keys must be COMPASS_POINTS values."
+                )
+            if not 0.0 <= factor <= 1.0:
+                raise ValueError(
+                    "Directional wall factors must be between 0 and 1."
+                )
 
         """
         Unlike other simulations, ThermalSimulation's Hourly data depend on the previous hourly data.
@@ -1200,7 +1223,12 @@ class ThermalSimulation(HourlySimulation):
             self.geometry.equivalent_rectangle.length
             + self.geometry.equivalent_rectangle.width
         )
-        Fsh_ob = Fsh_ob_overhand * Fsh_ob_own  # LK95:LR95
+        directional_factor = self._wall_solar_factors.get(compass_point, 1.0,)
+        Fsh_ob = (Fsh_ob_overhand
+                  * Fsh_ob_own
+                  * self._wall_solar_factor
+                  * directional_factor)
+       # Fsh_ob = Fsh_ob_overhand * Fsh_ob_own  # LK95:LR95
         u_value = self.spec.uvalue_facade  # LK104:LR104
         opaque_area = row["opaque_area"]  # LK105:LR105
         Rse = self.rse  # KU: ISO 6946

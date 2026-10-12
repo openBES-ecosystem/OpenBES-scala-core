@@ -49,6 +49,8 @@ def _run_scenario(
     thermal = ThermalSimulation(
         spec = inputs.spec,
         roof_solar_factor = inputs.roof_solar_factor,
+        wall_solar_factor = inputs.wall_solar_factor,
+        wall_solar_factors=inputs.wall_solar_factors,
     )
 
     # Collect the existing free-running temperature output

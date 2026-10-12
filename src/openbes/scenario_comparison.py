@@ -10,7 +10,7 @@ and returns the new temperatures
 compare_interventions function runs the baseline once, runs the requested scenarios and assembles the comparisons
 
 The wrapper returns 2x tables (1) temperatures = the baseline and intervention temperatures aligned by hour.
-(2) temperature_differences = each intervention temperature minus the baseline temperature 
+(2) temperature_differences = each intervention temperature minus the baseline temperature
 """
 from copy import deepcopy
 from dataclasses import dataclass
@@ -56,7 +56,7 @@ def _run_scenario(
 
 def compare_interventions(
         original_spec : OpenBESSpecification,
-        scenario: Sequence[Scenario],
+        scenarios: Sequence[Scenario],
 
 )-> ComparisonResult:
     names = [scenario.name for scenario in scenarios]
@@ -83,7 +83,7 @@ def compare_interventions(
     # Each column contains one scenario's hourly temperatures
     temperatures = pd.DataFrame(results)
 
-    # Substract baseline temperature at the corresponding hour
+    # Subtract baseline temperature at the corresponding hour
     differences = (
         temperatures.drop(columns="Baseline")
         .subtract(temperatures["Baseline"], axis = "index")

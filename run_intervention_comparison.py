@@ -24,7 +24,7 @@ from openbes.scenario_comparison import Scenario, compare_interventions
 from openbes.simulations.geometry import BuildingGeometry
 from openbes.types import ORIENTATIONS
 
-from openbes.interventions,wall_shading import FixedWallShade
+from openbes.interventions.wall_shading import FixedWallShade
 
 
 # Find the folder containing this driver script.
@@ -37,29 +37,70 @@ def main():
     # Load the original Holywell House inputs.
     spec = get_holywell_house_spec()
 
+    geometry = BuildingGeometry(spec)
+
+    wall_directions = {
+        orientation: geometry.get_compass_point_for_orientation(orientation)
+        for orientation in ORIENTATIONS
+    }
+    print("\nBuilding-side directions:")
+    for orientation, direction in wall_directions.items():
+        print(f"{orientation.value}: {direction.value}")
+
+    front_direction = wall_directions[ORIENTATIONS.Up]
+    right_direction = wall_directions[ORIENTATIONS.Right]
+
     # Describe the intervention cases we want to compare.
     # For an initial baseline-only run, replace this list with:
     #scenarios = []
 
     scenarios = [
         Scenario(
-            name="Roof factor 1.0",
+            name="Neutral shading",
             interventions=(
                 FixedRoofShade(solar_factor=1.0),
+                FixedWallShade(
+                    solar_factor=1.0,
+                    compass_points=(front_direction,),
+                ),
             ),
         ),
         Scenario(
-            name="Roof factor 0.5",
+            name="Roof shading only",
             interventions=(
                 FixedRoofShade(solar_factor=0.5),
             ),
         ),
+        # Testing shading of two different walls using different solar factors
+        Scenario(
+            name="Front and right wall shading",
+            interventions=(
+                FixedWallShade(
+                    solar_factor=0.5,
+                    compass_points=(front_direction,),
+                ),
+                FixedWallShade(
+                    solar_factor = 0.7,
+                    compass_points=(right_direction,),
+                ),
+            ),
+        ),
+        Scenario(
+            name="Roof and front and right wall shading",
+            interventions=(
+                FixedRoofShade(solar_factor=0.5),
+                FixedWallShade(
+                    solar_factor=0.5,
+                    compass_points=(front_direction,),
+                ),
+            ),
+        ),
     ]
 
-    # Ask the wrapper to run the baseline and these scenarios.
+    # Run the baseline and requested scenarios
     comparison = compare_interventions(
-        original_spec=spec,
-        scenarios=scenarios,
+        original_spec = spec,
+        scenarios = scenarios,
     )
 
     # Retrieve the table of hourly temperatures.

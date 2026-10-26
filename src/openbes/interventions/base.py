@@ -9,6 +9,8 @@ from typing import Protocol
 
 from openbes.types import COMPASS_POINTS, OpenBESSpecification
 
+from .window_overhang import ScheduledWindowShade
+
 @dataclass
 class ScenarioInputs:
     """Inputs used by one scenario
@@ -24,6 +26,11 @@ class ScenarioInputs:
     # Additional factors applied to selected facade directions
     # default_factory = dict creates a separate empty dictionary for every scenario
     wall_solar_factors: dict[COMPASS_POINTS, float] = field(default_factory=dict)
+
+    #adding window shading scenarios
+    window_shades: list[ScheduledWindowShade] = field(
+        default_factory=list
+    )
 
 class Intervention(Protocol):
     """An intervention must provide an apply() method

@@ -1,7 +1,8 @@
 """
 08/10/2026 - HM WIP
 
-Writing the cooling strategies wrapper
+Cooling strategies wrapper
+
 The aim is to output the results of each cooling strategy and compare to the original input
 
 _run_scenario function copies the original inputs, applies the interventions and creatures a new thermal simulation
@@ -13,7 +14,7 @@ The wrapper returns 2x tables (1) temperatures = the baseline and intervention t
 (2) temperature_differences = each intervention temperature minus the baseline temperature
 """
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Sequence
 
 import pandas as pd
@@ -32,10 +33,14 @@ class ComparisonResult:
     temperatures: pd.DataFrame
     temperature_differences: pd.DataFrame
 
+    window_shading: dict[str, pd.DataFrame] = field(
+        default_factory = dict
+    )
+
 def _run_scenario(
         original_spec : OpenBESSpecification,
         scenario: Scenario,
-) -> pd.Series:
+) -> tuple[pd.Series, pd.DataFrame]:
     # Create inputs belonging only to this scenario
     inputs = ScenarioInputs(
         spec = deepcopy(original_spec),
@@ -51,47 +56,56 @@ def _run_scenario(
         roof_solar_factor = inputs.roof_solar_factor,
         wall_solar_factor = inputs.wall_solar_factor,
         wall_solar_factors=inputs.wall_solar_factors,
+        window_shades= tuple(inputs.window_shades),
     )
 
     # Collect the existing free-running temperature output
-    return thermal.air_free_temp.copy().rename(scenario.name)
+    return (
+        thermal.air_free_temp.copy().rename(scenario.name),
+        thermal.window_shading_details,
+    )
 
 def compare_interventions(
-        original_spec : OpenBESSpecification,
+        original_spec: OpenBESSpecification,
         scenarios: Sequence[Scenario],
-
-)-> ComparisonResult:
+) -> ComparisonResult:
+    scenarios = tuple(scenarios)
     names = [scenario.name for scenario in scenarios]
 
-    if "Baseline" in names or len(names) != len(set(names)):
-        raise ValueError(
-            "Scenario names must be unique; 'Baseline' is reserved for baseline"
-        )
-    # Run the original building once, without added interventions
-    baseline = _run_scenario(
+    if "Baseline" in names:
+        raise ValueError("Baseline is added automatically.")
+
+    if len(names) != len(set(names)):
+        raise ValueError("Scenario names must be unique.")
+
+    baseline, _ = _run_scenario(
         original_spec,
-        Scenario(name = "Baseline"),
+        Scenario(name="Baseline"),
     )
 
     results = {"Baseline": baseline}
+    shading_results = {}
 
-    # Run each requested scenario independently
     for scenario in scenarios:
-        results[scenario.name] = _run_scenario(
+        temperature, shading = _run_scenario(
             original_spec,
             scenario,
         )
 
-    # Each column contains one scenario's hourly temperatures
+        results[scenario.name] = temperature
+        shading_results[scenario.name] = shading
+
     temperatures = pd.DataFrame(results)
 
-    # Subtract baseline temperature at the corresponding hour
-    differences = (
-        temperatures.drop(columns="Baseline")
-        .subtract(temperatures["Baseline"], axis = "index")
+    differences = temperatures.drop(
+        columns="Baseline"
+    ).subtract(
+        temperatures["Baseline"],
+        axis="index",
     )
 
     return ComparisonResult(
-        temperatures = temperatures,
-        temperature_differences = differences,
+        temperatures=temperatures,
+        temperature_differences=differences,
+        window_shading=shading_results,
     )

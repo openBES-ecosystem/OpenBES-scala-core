@@ -4,6 +4,10 @@ from numpy import nan, select, array, maximum, isnan, logical_not, radians, wher
 from pandas import DataFrame, Series, MultiIndex, Index, concat
 import os
 
+#Adding new window shading intervention
+from ..interventions.window_overhang import ScheduledWindowShade
+from .window_shading import calculate_window_shading
+
 from .base import HourlySimulation, SimulationError
 from .geometry import BuildingGeometry, THERMAL_BREAK_TRANSMITTANCE
 from .lighting import LightingSimulation
@@ -189,7 +193,7 @@ class ThermalSimulation(HourlySimulation):
 
     HM - 12/10/2026
     HM WIP - Adding changes to wall shading to test interaction of interventions (roof + wall shading)
-
+            Adding window overhang dynamic shading interventions
 
     """
     geometry: BuildingGeometry
@@ -220,10 +224,11 @@ class ThermalSimulation(HourlySimulation):
         lighting: LightingSimulation = None,
         ventilation: VentilationSimulation = None,
         location: LocationSimulation = None,
-        *, #HM WIP - means new argument to be supplied by name
+        *, #HM WIP
         roof_solar_factor: float = 1.0,
         wall_solar_factor: float = 1.0,
         wall_solar_factors: dict[COMPASS_POINTS, float] | None = None,
+        window_shades: tuple[ScheduledWindowShade, ...] = (),
 
     ):
         """
@@ -275,6 +280,11 @@ class ThermalSimulation(HourlySimulation):
             raise ThermalSimulationError(
                 f"Failed to initialize ThermalSimulation due to error in dependent simulation: {err}"
             ) from err
+        #HM WIP - Window dynamic shading
+        self._window_shades = tuple(window_shades)
+        self._window_shading_factors = None
+        self.window_shading_details = DataFrame(index=self._hours.index)
+
         # Pre-calculate all hour-dependent values in sequence
         n = len(self._hours)
         results = []
@@ -1175,6 +1185,29 @@ class ThermalSimulation(HourlySimulation):
             * self.solar_radiation_glazing_adjustment[compass_points]
             * self.solar_irradiation.solar_irradiation[compass_points]
         )
+        #HM WIP - Dynamic window shading
+        if self._window_shades:
+            if self._window_shading_factors is None:
+                (
+                    self._window_shading_factors,
+                    self.window_shading_details,
+                ) = calculate_window_shading(
+                    spec=self.spec,
+                    geometry=self.geometry,
+                    solar=self.solar_irradiation,
+                    shades=self._window_shades,
+                 )
+
+            shading_factors = self._window_shading_factors[compass_points]
+
+            incoming_radiation_summer = (
+                incoming_radiation_summer * shading_factors
+            )
+            incoming_radiation_winter = (
+                incoming_radiation_winter * shading_factors
+            )
+
+
         epsilon_5 = 5 * 0.9  # KY81:LF81 via Inputs G230
         delta_theta_er = 11  # Hardcoded in KY82: ISO 13790, 11.4.6
         reduction = DataFrame(

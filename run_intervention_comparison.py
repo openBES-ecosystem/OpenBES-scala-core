@@ -3,7 +3,7 @@
 
 Driver script to run the comparison wrapper - testing new wrapper and basic roof shading cooling strategy
 
-Code is from Chatgpt
+Testing dynamic window shading
 
 """
 # Path lets us locate files relative to this script.
@@ -21,10 +21,17 @@ from openbes.interventions.roof_shading import FixedRoofShade
 # These are the scenario definition and comparison wrapper.
 from openbes.scenario_comparison import Scenario, compare_interventions
 
-from openbes.simulations.geometry import BuildingGeometry
+#from openbes.simulations.geometry import BuildingGeometry
 from openbes.types import ORIENTATIONS
 
 from openbes.interventions.wall_shading import FixedWallShade
+
+from openbes.interventions.window_overhang import (
+    DailyClosedSchedule,
+    ScheduledWindowShade,
+)
+from openbes.simulations.geometry import BuildingGeometry
+from openbes.simulations.window_shading import windows_from_geometry
 
 
 # Find the folder containing this driver script.
@@ -37,7 +44,50 @@ def main():
     # Load the original Holywell House inputs.
     spec = get_holywell_house_spec()
 
-    geometry = BuildingGeometry(spec)
+    geometry = BuildingGeometry(spec=spec)
+    windows = windows_from_geometry(spec, geometry)
+
+    for window in windows:
+        print(
+             window.window_id,
+             window.compass_point,
+             window.modelled_area_m2,
+        )
+
+    # Defining a window shade closing schedule
+    closed_schedule = DailyClosedSchedule(
+        intervals=((10.0, 18.0),),
+        months=(5, 6, 7, 8, 9),
+    )
+
+    # Defining window shading devices
+    neutral_overhang = ScheduledWindowShade(
+        projection_m=0.0,
+        gap_m=0.0,
+        closed_schedule=closed_schedule,
+        replace_seasonal_factors = True,
+    )
+
+    all_window_overhangs = ScheduledWindowShade(
+        projection_m=0.6,
+        gap_m=0.2,
+        closed_schedule=closed_schedule,
+        window_ids=None,
+        mode="retractable_overhang",
+        replace_seasonal_factors= True,
+        record_details=True,
+    )
+
+    selected_window_overhang = ScheduledWindowShade(
+        projection_m=0.6,
+        gap_m=0.2,
+        closed_schedule=closed_schedule,
+        window_ids=(windows[0].window_id,),
+        mode="retractable_overhang",
+        record_details=True,
+    )
+
+    #geometry = BuildingGeometry(spec)
 
     wall_directions = {
         orientation: geometry.get_compass_point_for_orientation(orientation)
@@ -95,6 +145,19 @@ def main():
                 ),
             ),
         ),
+        Scenario(
+            name="Neutral overhang",
+            interventions=(neutral_overhang,),
+        ),
+        Scenario(
+            name="Scheduled overhangs",
+            interventions=(all_window_overhangs,),
+        ),
+        Scenario(
+            name="Selected window overhang",
+            interventions=(selected_window_overhang,),
+        ),
+
     ]
 
     # Run the baseline and requested scenarios
@@ -111,6 +174,14 @@ def main():
 
     # Extract the baseline column as a single temperature series.
     baseline = temperatures["Baseline"]
+
+    overhang_effect = (
+            temperatures["Scheduled overhangs"]
+            - temperatures["Neutral overhang"]
+    )
+
+    print(temperatures.head())
+    print("Largest temperature reduction:", overhang_effect.min())
 
     # Display the number of hours and a preview of the results.
     print("\nNumber of simulated hours:", len(baseline))
@@ -191,6 +262,18 @@ def main():
     # Save the scenario summary.
     summary.to_csv(
         output_dir / "holywell_temperature_summary.csv"
+    )
+
+    overhang_effect.rename(
+        "Overhang temperature difference"
+    ).to_csv(
+        output_dir / "overhang_effect_vs_control.csv"
+    )
+
+    comparison.window_shading[
+        "Scheduled overhangs"
+    ].to_csv(
+        output_dir / "overhang_window_details.csv"
     )
 
     # Show where the files were saved.

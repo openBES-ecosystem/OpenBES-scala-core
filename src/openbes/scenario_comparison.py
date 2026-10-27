@@ -37,9 +37,15 @@ class ComparisonResult:
         default_factory = dict
     )
 
+    sheltair_ventilation: dict[str, pd.DataFrame] = field(
+        default_factory=dict
+    )
+
 def _run_scenario(
         original_spec : OpenBESSpecification,
         scenario: Scenario,
+        *,
+        sheltair_reports: dict[str, pd.DataFrame] | None = None,
 ) -> tuple[pd.Series, pd.DataFrame]:
     # Create inputs belonging only to this scenario
     inputs = ScenarioInputs(
@@ -50,6 +56,22 @@ def _run_scenario(
     for intervention in scenario.interventions:
         intervention.apply(inputs)
 
+    if inputs.sheltair_ventilation is not None:
+        previous_window_models = (
+            getattr(inputs, "single_sided_ventilation", None),
+            getattr(inputs, "window_ventilation", None),
+        )
+
+        if any(
+                model is not None
+                for model in previous_window_models
+        ):
+            raise ValueError(
+                "Use one window-ventilation model per scenario. "
+                "Remove the earlier window-ventilation intervention "
+                "from this SheltAir scenario."
+            )
+
     # Creating the thermal model runs its hourly calculation
     thermal = ThermalSimulation(
         spec = inputs.spec,
@@ -57,8 +79,12 @@ def _run_scenario(
         wall_solar_factor = inputs.wall_solar_factor,
         wall_solar_factors=inputs.wall_solar_factors,
         window_shades= tuple(inputs.window_shades),
+        sheltair_ventilation=inputs.sheltair_ventilation,
     )
-
+    if sheltair_reports is not None:
+        sheltair_reports[scenario.name] = (
+            thermal.sheltair_ventilation_details
+        )
     # Collect the existing free-running temperature output
     return (
         thermal.air_free_temp.copy().rename(scenario.name),
@@ -68,6 +94,7 @@ def _run_scenario(
 def compare_interventions(
         original_spec: OpenBESSpecification,
         scenarios: Sequence[Scenario],
+        sheltair_reports: dict[str, pd.DataFrame] = {}
 ) -> ComparisonResult:
     scenarios = tuple(scenarios)
     names = [scenario.name for scenario in scenarios]
@@ -81,6 +108,7 @@ def compare_interventions(
     baseline, _ = _run_scenario(
         original_spec,
         Scenario(name="Baseline"),
+        sheltair_reports=sheltair_reports,
     )
 
     results = {"Baseline": baseline}
@@ -90,6 +118,7 @@ def compare_interventions(
         temperature, shading = _run_scenario(
             original_spec,
             scenario,
+            sheltair_reports=sheltair_reports,
         )
 
         results[scenario.name] = temperature
@@ -108,4 +137,5 @@ def compare_interventions(
         temperatures=temperatures,
         temperature_differences=differences,
         window_shading=shading_results,
+        sheltair_ventilation=sheltair_reports,
     )

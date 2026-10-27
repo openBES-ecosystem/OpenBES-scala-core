@@ -11,11 +11,20 @@ from openbes.types import COMPASS_POINTS, OpenBESSpecification
 
 from .window_overhang import ScheduledWindowShade
 
+from .sheltair_ventilation import SheltAirSingleOpening
+
 @dataclass
 class ScenarioInputs:
     """Inputs used by one scenario
     HM note: ScenarioInputs holds the inputs for one run in this case roof_solar_factor = 1.0, so it's a scenario
     with no roof shading intervention.
+
+    Interventions added:
+    Roof shading
+    Wall shading
+    Window shading (dynamic)
+    Single-sided and single opening ventilation - using SheltAir equations
+
     """
     spec: OpenBESSpecification
     roof_solar_factor:float = 1.0
@@ -31,6 +40,7 @@ class ScenarioInputs:
     window_shades: list[ScheduledWindowShade] = field(
         default_factory=list
     )
+    sheltair_ventilation: SheltAirSingleOpening | None = None # none means additional wind ventilation model is disabled
 
 class Intervention(Protocol):
     """An intervention must provide an apply() method

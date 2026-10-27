@@ -32,6 +32,10 @@ from openbes.interventions.window_overhang import (
 )
 from openbes.simulations.geometry import BuildingGeometry
 from openbes.simulations.window_shading import windows_from_geometry
+from dataclasses import replace
+from openbes.interventions.sheltair_ventilation import (
+    SheltAirSingleOpening,
+)
 
 
 # Find the folder containing this driver script.
@@ -46,6 +50,82 @@ def main():
 
     geometry = BuildingGeometry(spec=spec)
     windows = windows_from_geometry(spec, geometry)
+
+    #HM WIP - Single sided ventilation using equations from SheltAir
+    if not windows:
+        raise ValueError("No modelled windows were found.")
+
+    # Start with one window from the existing catalogue.
+    selected_window = windows[0]
+
+    """
+    Replace selected_window = windows[0] with below code to select specific window using window ID
+    
+    selected_window = next(
+        window
+        for window in windows
+        if window.window_id == "your_selected_window_id"
+)"""
+
+    print(
+        "Selected ventilation window:",
+        selected_window.window_id,
+        selected_window.compass_point,
+    )
+
+    wind_opening = SheltAirSingleOpening(
+        window_id=selected_window.window_id,
+
+        # Illustrative aperture assumption; replace with your geometry.
+        max_free_area_m2=0.20,
+
+        # Assumes an aperture extending over the full window height.
+        opening_height_m=selected_window.height_m,
+
+        driving_force="wind",
+
+        # Illustrative assumption, NOT measured Holywell data.
+        local_wind_factor=0.8,
+
+        opening_fraction=1.0,
+
+        open_above_c=24.0,
+        close_below_c=23.0,
+        min_cooling_difference_c=1.0,
+
+        open_from_hour=8.0,
+        open_until_hour=22.0,
+        months=(5, 6, 7, 8, 9),
+    )
+
+    # Identical geometry and control settings, different driving force.
+    buoyancy_opening = replace(
+        wind_opening,
+        driving_force="buoyancy",
+    )
+
+    # A neutral integration check.
+    closed_opening = replace(
+        wind_opening,
+        opening_fraction=0.0,
+    )
+
+    scenarios = [
+        Scenario(
+            name="SheltAir closed",
+            interventions=(closed_opening,),
+        ),
+
+        Scenario(
+            name="SheltAir wind",
+            interventions=(wind_opening,),
+        ),
+
+        Scenario(
+            name="SheltAir buoyancy",
+            interventions=(buoyancy_opening,),
+         ),
+]
 
     for window in windows:
         print(
@@ -104,7 +184,7 @@ def main():
     # For an initial baseline-only run, replace this list with:
     #scenarios = []
 
-    scenarios = [
+    scenarios.extend ([
         Scenario(
             name="Neutral shading",
             interventions=(
@@ -158,7 +238,7 @@ def main():
             interventions=(selected_window_overhang,),
         ),
 
-    ]
+])
 
     # Run the baseline and requested scenarios
     comparison = compare_interventions(
@@ -171,6 +251,52 @@ def main():
 
     # Retrieve each intervention's hourly difference from baseline.
     differences = comparison.temperature_differences
+
+    #HM WIP; single sided ventilation using sheltair equations
+    output_dir = Path(__file__).resolve().parent / "outputs"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    selected_cases = [
+        "Baseline",
+        "SheltAir closed",
+        "SheltAir wind",
+        "SheltAir buoyancy",
+    ]
+
+    temperatures[selected_cases].to_csv(
+        output_dir / "holywell_sheltair_temperatures.csv"
+    )
+
+    differences[
+        ["SheltAir wind", "SheltAir buoyancy"]
+    ].to_csv(
+         output_dir / "holywell_sheltair_temperature_differences.csv"
+    )
+
+    comparison.sheltair_ventilation["SheltAir wind"].to_csv(
+     output_dir / "sheltair_wind_airflow.csv"
+    )
+
+    comparison.sheltair_ventilation["SheltAir buoyancy"].to_csv(
+     output_dir / "sheltair_buoyancy_airflow.csv"
+    )
+
+    closed_matches = (
+        temperatures["SheltAir closed"].round(6).equals(
+            temperatures["Baseline"].round(6)
+        )
+    )
+
+    print("Closed-opening control matches baseline:", closed_matches)
+
+    for name in ("SheltAir wind", "SheltAir buoyancy"):
+        details = comparison.sheltair_ventilation[name]
+
+        open_hours = int(
+            (details["sa_opening_fraction"] > 0).sum()
+        )
+
+        print(name, "- hours with opening enabled:", open_hours)
 
     # Extract the baseline column as a single temperature series.
     baseline = temperatures["Baseline"]

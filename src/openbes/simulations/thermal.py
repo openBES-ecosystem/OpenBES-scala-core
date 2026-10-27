@@ -8,6 +8,16 @@ import os
 from ..interventions.window_overhang import ScheduledWindowShade
 from .window_shading import calculate_window_shading
 
+# Adding single-sided ventilation using SheltAir equations
+from ..interventions.sheltair_ventilation import (
+    SheltAirSingleOpening,
+)
+from .sheltair_ventilation import (
+    SheltAirOpeningModel,
+    empty_sheltair_details,
+)
+from .window_shading import windows_from_geometry
+
 from .base import HourlySimulation, SimulationError
 from .geometry import BuildingGeometry, THERMAL_BREAK_TRANSMITTANCE
 from .lighting import LightingSimulation
@@ -229,6 +239,7 @@ class ThermalSimulation(HourlySimulation):
         wall_solar_factor: float = 1.0,
         wall_solar_factors: dict[COMPASS_POINTS, float] | None = None,
         window_shades: tuple[ScheduledWindowShade, ...] = (),
+        sheltair_ventilation: SheltAirSingleOpening | None = None,
 
     ):
         """
@@ -284,6 +295,30 @@ class ThermalSimulation(HourlySimulation):
         self._window_shades = tuple(window_shades)
         self._window_shading_factors = None
         self.window_shading_details = DataFrame(index=self._hours.index)
+
+
+        # HM WIP - SheltAir single-sided ventilation
+        self._sheltair_model = None
+
+        if sheltair_ventilation is not None:
+            if (self.spec.natural_ventilation_night or 0.0) != 0.0:
+                raise ValueError(
+                    "Set natural_ventilation_night to 0 in the common "
+                    "comparison specification before enabling SheltAir ventilation."
+                )
+
+            if not (
+                    self.geometry.conditioned_floor_area > 0
+                    and self.spec.floor_to_ceiling_height > 0
+            ):
+                raise ValueError(
+                    "Positive conditioned floor area and ceiling height are required."
+                )
+
+            self._sheltair_model = SheltAirOpeningModel(
+                settings=sheltair_ventilation,
+                windows=windows_from_geometry(self.spec, self.geometry),
+            )
 
         # Pre-calculate all hour-dependent values in sequence
         n = len(self._hours)
@@ -430,12 +465,43 @@ class ThermalSimulation(HourlySimulation):
         air_flow_dependent = qv_diff + qv_infred
 
         """
+        4a. Adding sheltair single-sided ventilation 
+        """
+        sa_details = empty_sheltair_details()
+        sheltair_specific_flow = 0.0
+
+        if self._sheltair_model is not None:
+            sa_details = self._sheltair_model.calculate(
+                indoor_temp_c=None if i == 0 else float(prev_air_free_temp),
+                outdoor_temp_c=float(dry_bulb_temp),
+                weather_wind_speed_m_s=float(self._cache["wind_speed"][i]),
+                month=int(month),
+                hour_midpoint=float(self._cache["hour"][i]) - 0.5,
+            )
+
+            floor_area = self.geometry.conditioned_floor_area
+
+            sheltair_specific_flow = (
+                sa_details["sa_applied_m3_h"] / floor_area
+            )
+
+            indoor_volume = (
+                floor_area
+                * self.spec.floor_to_ceiling_height
+            )
+
+            sa_details["sa_ach"] = (
+                sa_details["sa_applied_m3_h"] / indoor_volume
+            )
+
+        """
         4. Air flow [Hourly simulation column JZ]
         """
         air_flow = (
             self._cache["ventilation_air_supply_rate"][i]
             + air_flow_dependent
             + air_flow_base
+            + sheltair_specific_flow
         )
 
         """
@@ -622,6 +688,9 @@ class ThermalSimulation(HourlySimulation):
             "heating_cooling_demand": heating_cooling_demand,
         }
 
+        #HM WIP - Sheltair single-sided ventilation
+        values.update(sa_details)
+
         if i == 1 and any(isnan(v) for v in values.values()):
             if self.geometry.conditioned_floor_area == 0:
                 logger.info("Conditioned floor area is zero, which will result in NaN values in thermal simulation.")
@@ -629,6 +698,12 @@ class ThermalSimulation(HourlySimulation):
                 raise ValueError(f"Unexpected NaN values:\n{DataFrame([values])}")
 
         return values
+
+    #HM WIP - sheltair single-sided ventilation
+    @property
+    def sheltair_ventilation_details(self) -> DataFrame:
+        """Hourly diagnostics for the additional SheltAir opening."""
+        return self._hours.filter(regex="^sa_").copy()
 
     @property
     def set_point_temperature(self) -> DataFrame:

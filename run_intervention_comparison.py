@@ -5,6 +5,8 @@ Driver script to run the comparison wrapper - testing new wrapper and basic roof
 
 Testing dynamic window shading
 
+# Connecting driver additions to include new cross-ventilation model
+
 """
 # Path lets us locate files relative to this script.
 from pathlib import Path
@@ -35,6 +37,14 @@ from openbes.simulations.window_shading import windows_from_geometry
 from dataclasses import replace
 from openbes.interventions.sheltair_ventilation import (
     SheltAirSingleOpening,
+)
+
+# Connecting driver additions:
+from pathlib import Path
+
+from driver_additions import (
+    append_cross_ventilation_cases,
+    save_cross_ventilation_results,
 )
 
 
@@ -110,6 +120,7 @@ def main():
         opening_fraction=0.0,
     )
 
+
     scenarios = [
         Scenario(
             name="SheltAir closed",
@@ -126,6 +137,12 @@ def main():
             interventions=(buoyancy_opening,),
          ),
 ]
+    # Cross-ventilation connection:
+    append_cross_ventilation_cases(
+        scenarios,
+        windows,
+        Scenario,
+    )
 
     for window in windows:
         print(
@@ -244,6 +261,17 @@ def main():
     comparison = compare_interventions(
         original_spec = spec,
         scenarios = scenarios,
+    )
+
+    # Cross-ventilation connection
+    output_dir = (
+            Path(__file__).resolve().parent
+            / "outputs"
+    )
+
+    save_cross_ventilation_results(
+        comparison,
+        output_dir,
     )
 
     # Retrieve the table of hourly temperatures.

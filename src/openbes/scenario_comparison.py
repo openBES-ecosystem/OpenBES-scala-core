@@ -12,6 +12,8 @@ compare_interventions function runs the baseline once, runs the requested scenar
 
 The wrapper returns 2x tables (1) temperatures = the baseline and intervention temperatures aligned by hour.
 (2) temperature_differences = each intervention temperature minus the baseline temperature
+
+
 """
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -22,6 +24,8 @@ import pandas as pd
 from openbes.interventions.base import Intervention, ScenarioInputs
 from openbes.simulations.thermal import ThermalSimulation
 from openbes.types import OpenBESSpecification
+
+
 
 @dataclass(frozen=True)
 class Scenario:

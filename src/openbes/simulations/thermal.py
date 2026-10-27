@@ -16,6 +16,14 @@ from .sheltair_ventilation import (
     SheltAirOpeningModel,
     empty_sheltair_details,
 )
+
+# Adding cross-ventilation
+from ..interventions.sheltair_cross_ventilation import (
+    SheltAirCrossVentilation,
+)
+from .sheltair_cross_ventilation import (
+    SheltAirCrossVentilationModel,
+)
 from .window_shading import windows_from_geometry
 
 from .base import HourlySimulation, SimulationError
@@ -191,19 +199,21 @@ class ThermalSimulation(HourlySimulation):
     Unlike the rest of our codebase, the thermal simulation prioritizes performance over interpretability,
     meaning we use Numpy arrays rather than Pandas Series/DataFrames for intermediate calculations.
 
-    HM - 08/10/2026
+    HM WIP:
 
-    HM WIP - Adding changes to roof shading to test ease of adding cooling interventions
+    Adding changes to roof shading to test ease of adding cooling interventions
     1) Adding roof_solar_factor to the __init__() method
     2) in @property def solar_heat_roof(self): changing Fsh_ob = 1 to Fsh_ob = self._roof_solar_factor
     This step will connect the roof shading intervention to the simulation
 
-    HM WIP - The above is a simple change to see if the intervention can be added, and to test if the constructed
+    The above is a simple change to see if the intervention can be added, and to test if the constructed
     wrapper 'scenario_comparison.py' works to compare results between a no-intervention scenario and an intervention.
 
-    HM - 12/10/2026
-    HM WIP - Adding changes to wall shading to test interaction of interventions (roof + wall shading)
-            Adding window overhang dynamic shading interventions
+    Adding changes to wall shading to test interaction of interventions (roof + wall shading)
+    Adding window overhang dynamic shading interventions
+
+    Adding single-sided 1 opening ventilation intervention, buoyancy and wind driven using SheltAir eqs
+    Adding cross-ventilation 2 openings ventilation intervention, buoyancy and wind driven using SheltAir eqs
 
     """
     geometry: BuildingGeometry
@@ -239,7 +249,9 @@ class ThermalSimulation(HourlySimulation):
         wall_solar_factor: float = 1.0,
         wall_solar_factors: dict[COMPASS_POINTS, float] | None = None,
         window_shades: tuple[ScheduledWindowShade, ...] = (),
-        sheltair_ventilation: SheltAirSingleOpening | None = None,
+        sheltair_ventilation: (
+                SheltAirSingleOpening | SheltAirCrossVentilation | None
+        ) = None,
 
     ):
         """
@@ -297,14 +309,14 @@ class ThermalSimulation(HourlySimulation):
         self.window_shading_details = DataFrame(index=self._hours.index)
 
 
-        # HM WIP - SheltAir single-sided ventilation
+        # HM WIP - SheltAir single-sided ventilation or cross ventilation
         self._sheltair_model = None
 
         if sheltair_ventilation is not None:
             if (self.spec.natural_ventilation_night or 0.0) != 0.0:
                 raise ValueError(
-                    "Set natural_ventilation_night to 0 in the common "
-                    "comparison specification before enabling SheltAir ventilation."
+                    "Set natural_ventilation_night to zero in the common "
+                    "comparison specification before using SheltAir."
                 )
 
             if not (
@@ -312,12 +324,32 @@ class ThermalSimulation(HourlySimulation):
                     and self.spec.floor_to_ceiling_height > 0
             ):
                 raise ValueError(
-                    "Positive conditioned floor area and ceiling height are required."
+                    "Positive floor area and ceiling height are required."
                 )
 
-            self._sheltair_model = SheltAirOpeningModel(
+            if isinstance(
+                    sheltair_ventilation,
+                    SheltAirCrossVentilation,
+            ):
+                model_class = SheltAirCrossVentilationModel
+
+            elif isinstance(
+                    sheltair_ventilation,
+                    SheltAirSingleOpening,
+            ):
+                model_class = SheltAirOpeningModel
+
+            else:
+                raise TypeError(
+                    "Unsupported SheltAir settings type."
+                )
+
+            self._sheltair_model = model_class(
                 settings=sheltair_ventilation,
-                windows=windows_from_geometry(self.spec, self.geometry),
+                windows=windows_from_geometry(
+                    self.spec,
+                    self.geometry,
+                ),
             )
 
         # Pre-calculate all hour-dependent values in sequence

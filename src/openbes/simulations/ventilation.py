@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+from math import copysign, isfinite, sqrt
 from typing import List
 
 from pandas import Series
@@ -7,10 +9,68 @@ from pandas import DataFrame
 from .base import EnergyUseSimulation, EnergyUseSimulationInitError, SimulationError
 from .geometry import BuildingGeometry
 from .occupancy import OccupationSimulation
-from ..schemas import VentilationSimulationOutput, VentilationSystemResult
+from ..schemas import PassiveOpening, VentilationSimulationOutput, VentilationSystemResult
 from ..types import OpenBESSpecification
 
 logger = logging.getLogger(__name__)
+
+
+def passive_stack_opening_factor(openings: Sequence[PassiveOpening]) -> float:
+    """Return the stack exchange factor in m² × sqrt(m) for fixed openings.
+
+    In a wind-free, well-mixed zone the temperature term is common to all
+    openings. The neutral pressure height therefore only depends on the
+    opening elevations and their discharge areas. Solve for it once per run.
+    """
+    discharge_areas = [
+        (opening.centre_height_m, opening.discharge_coefficient * opening.free_area_m2)
+        for opening in openings
+        if opening.free_area_m2 > 0
+    ]
+    if len(discharge_areas) < 2:
+        return 0.0
+
+    lower = min(height for height, _ in discharge_areas)
+    upper = max(height for height, _ in discharge_areas)
+    if lower == upper:
+        return 0.0
+
+    for _ in range(48):
+        neutral = lower + (upper - lower) / 2
+        balance = sum(
+            area * copysign(sqrt(abs(neutral - height)), neutral - height)
+            for height, area in discharge_areas
+        )
+        if balance > 0:
+            upper = neutral
+        else:
+            lower = neutral
+
+    neutral = lower + (upper - lower) / 2
+    # The flow above the neutral height balances this flow. Count it once.
+    return sum(
+        area * sqrt(neutral - height)
+        for height, area in discharge_areas
+        if height < neutral
+    )
+
+
+def passive_stack_airflow_m3_h(
+    opening_factor: float, indoor_temp_c: float | None, outdoor_temp_c: float
+) -> float:
+    """Calculate the magnitude of outdoor air exchange from buoyancy."""
+    if not opening_factor or indoor_temp_c is None:
+        return 0.0
+
+    if any(
+        not isfinite(temp) or temp <= -273.15
+        for temp in (indoor_temp_c, outdoor_temp_c)
+    ):
+        raise ValueError("Ventilation temperatures must be finite and above absolute zero.")
+
+    mean_temp_k = (indoor_temp_c + outdoor_temp_c) / 2 + 273.15
+    temperature_difference = abs(indoor_temp_c - outdoor_temp_c)
+    return 3600 * opening_factor * sqrt(2 * 9.81 * temperature_difference / mean_temp_k)
 
 
 class VentilationSimulationError(SimulationError):

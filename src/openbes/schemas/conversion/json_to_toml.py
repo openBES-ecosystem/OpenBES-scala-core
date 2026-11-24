@@ -440,6 +440,11 @@ def json_to_toml(
         for i, vs in enumerate(spec.ventilation_systems[:2], start=1):
             ventilation_system_to_toml(vs, i)
 
+    if "passive_openings" in sset and spec.passive_openings is not None:
+        toml["i.passive_openings"] = spec.model_dump(
+            include={"passive_openings"}, mode="json", exclude_unset=True
+        )["passive_openings"]
+
     # ── lighting systems ───────────────────────────────────────────────────────
     if spec.lighting_systems:
         for i, ls in enumerate(spec.lighting_systems[:6], start=1):

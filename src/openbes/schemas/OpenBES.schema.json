@@ -1073,6 +1073,36 @@
         }
       }
     },
+    "PassiveOpening": {
+      "type": "object",
+      "description": "A fixed outdoor opening for buoyancy-driven ventilation.",
+      "properties": {
+        "opening_id": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "Unique name of the opening."
+        },
+        "centre_height_m": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Opening centre elevation in metres above the same floor datum."
+        },
+        "free_area_m2": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Unobstructed opening area in square metres before the discharge coefficient."
+        },
+        "discharge_coefficient": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "default": 0.6,
+          "description": "Discharge coefficient for flow through the opening."
+        }
+      },
+      "required": ["opening_id", "centre_height_m", "free_area_m2"],
+      "additionalProperties": false
+    },
     "OpenBESSpecification": {
       "type": "object",
       "properties": {
@@ -1118,6 +1148,13 @@
           "description": "Ventilation systems in the building.",
           "items": {
             "$ref": "#/definitions/VentilationSystem"
+          }
+        },
+        "passive_openings": {
+          "type": "array",
+          "description": "Fixed outdoor openings included in the building's stack airflow.",
+          "items": {
+            "$ref": "#/definitions/PassiveOpening"
           }
         },
         "lighting_systems": {

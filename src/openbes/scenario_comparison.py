@@ -44,12 +44,14 @@ class ComparisonResult:
     sheltair_ventilation: dict[str, pd.DataFrame] = field(
         default_factory=dict
     )
+    relative_humidity: pd.DataFrame | None = None
 
 def _run_scenario(
         original_spec : OpenBESSpecification,
         scenario: Scenario,
         *,
         sheltair_reports: dict[str, pd.DataFrame] | None = None,
+        humidity_reports: dict[str, pd.Series] | None = None,
 ) -> tuple[pd.Series, pd.DataFrame]:
     # Create inputs belonging only to this scenario
     inputs = ScenarioInputs(
@@ -89,17 +91,29 @@ def _run_scenario(
         sheltair_reports[scenario.name] = (
             thermal.sheltair_ventilation_details
         )
-    # Collect the existing free-running temperature output
+    temperature = thermal.air_free_temp.copy().rename(scenario.name)
+    if humidity_reports is not None:
+        humidity_reports[scenario.name] = thermal.indoor_moisture_at_temperature(
+            temperature
+        )["indoor_relative_humidity"]
+
     return (
-        thermal.air_free_temp.copy().rename(scenario.name),
+        temperature,
         thermal.window_shading_details,
     )
 
 def compare_interventions(
         original_spec: OpenBESSpecification,
         scenarios: Sequence[Scenario],
-        sheltair_reports: dict[str, pd.DataFrame] = {}
+        sheltair_reports: dict[str, pd.DataFrame] | None = None,
+        *,
+        include_relative_humidity: bool = False,
 ) -> ComparisonResult:
+    """Compare each case's free-running temperature and optionally humidity."""
+    if sheltair_reports is None:
+        sheltair_reports = {}
+    humidity_reports = {} if include_relative_humidity else None
+
     scenarios = tuple(scenarios)
     names = [scenario.name for scenario in scenarios]
 
@@ -113,6 +127,7 @@ def compare_interventions(
         original_spec,
         Scenario(name="Baseline"),
         sheltair_reports=sheltair_reports,
+        humidity_reports=humidity_reports,
     )
 
     results = {"Baseline": baseline}
@@ -123,6 +138,7 @@ def compare_interventions(
             original_spec,
             scenario,
             sheltair_reports=sheltair_reports,
+            humidity_reports=humidity_reports,
         )
 
         results[scenario.name] = temperature
@@ -142,4 +158,7 @@ def compare_interventions(
         temperature_differences=differences,
         window_shading=shading_results,
         sheltair_ventilation=sheltair_reports,
+        relative_humidity=(
+            pd.DataFrame(humidity_reports) if humidity_reports is not None else None
+        ),
     )

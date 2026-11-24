@@ -20,11 +20,15 @@ from .sheltair_ventilation import (
 # Adding cross-ventilation
 from ..interventions.sheltair_cross_ventilation import (
     SheltAirCrossVentilation,
+    SheltAirSingleSidedTwoOpenings,
 )
 from .sheltair_cross_ventilation import (
-    SheltAirCrossVentilationModel,
+    SheltAirTwoOpeningModel,
 )
 from .window_shading import windows_from_geometry
+
+# Adding moisture simulations
+from.moisture import calculate_indoor_moisture
 
 from .base import HourlySimulation, SimulationError
 from .geometry import BuildingGeometry, THERMAL_BREAK_TRANSMITTANCE
@@ -32,7 +36,11 @@ from .lighting import LightingSimulation
 from .occupancy import OccupationSimulation
 from .location import LocationSimulation
 from .reporting import MONTH_NAMES, find_hour_peak, output_precision, to_output_csv
-from .ventilation import VentilationSimulation
+from .ventilation import (
+    VentilationSimulation,
+    passive_stack_airflow_m3_h,
+    passive_stack_opening_factor,
+)
 from ..schemas import ThermalSimulationOutput, SpaceThermalDemandResult
 from ..types import (
     OpenBESSpecification,
@@ -215,6 +223,9 @@ class ThermalSimulation(HourlySimulation):
     Adding single-sided 1 opening ventilation intervention, buoyancy and wind driven using SheltAir eqs
     Adding cross-ventilation 2 openings ventilation intervention, buoyancy and wind driven using SheltAir eqs
 
+    Adding a moisture simulation to try and get the initial indoor humidity ratio value
+    Connecting the moisture simulation which uses functions from PsychroLib
+
     """
     geometry: BuildingGeometry
     occupancy: OccupationSimulation
@@ -250,7 +261,10 @@ class ThermalSimulation(HourlySimulation):
         wall_solar_factors: dict[COMPASS_POINTS, float] | None = None,
         window_shades: tuple[ScheduledWindowShade, ...] = (),
         sheltair_ventilation: (
-                SheltAirSingleOpening | SheltAirCrossVentilation | None
+            SheltAirSingleOpening
+            | SheltAirCrossVentilation
+            | SheltAirSingleSidedTwoOpenings
+            | None
         ) = None,
 
     ):
@@ -327,30 +341,19 @@ class ThermalSimulation(HourlySimulation):
                     "Positive floor area and ceiling height are required."
                 )
 
-            if isinstance(
-                    sheltair_ventilation,
-                    SheltAirCrossVentilation,
-            ):
-                model_class = SheltAirCrossVentilationModel
-
-            elif isinstance(
-                    sheltair_ventilation,
-                    SheltAirSingleOpening,
-            ):
-                model_class = SheltAirOpeningModel
-
+            if isinstance(sheltair_ventilation, SheltAirSingleSidedTwoOpenings):
+                self._sheltair_model = SheltAirTwoOpeningModel(sheltair_ventilation)
             else:
-                raise TypeError(
-                    "Unsupported SheltAir settings type."
+                if isinstance(sheltair_ventilation, SheltAirCrossVentilation):
+                    model_class = SheltAirTwoOpeningModel
+                elif isinstance(sheltair_ventilation, SheltAirSingleOpening):
+                    model_class = SheltAirOpeningModel
+                else:
+                    raise TypeError("Unsupported SheltAir settings type.")
+                self._sheltair_model = model_class(
+                    settings=sheltair_ventilation,
+                    windows=windows_from_geometry(self.spec, self.geometry),
                 )
-
-            self._sheltair_model = model_class(
-                settings=sheltair_ventilation,
-                windows=windows_from_geometry(
-                    self.spec,
-                    self.geometry,
-                ),
-            )
 
         # Pre-calculate all hour-dependent values in sequence
         n = len(self._hours)
@@ -371,6 +374,10 @@ class ThermalSimulation(HourlySimulation):
         """
         # Make sure min/max set points are calculated
         assert self.set_point_temperature is not None
+
+        opening_factor = passive_stack_opening_factor(self.spec.passive_openings)
+        if opening_factor and not self.geometry.conditioned_floor_area > 0:
+            raise ValueError("Passive ventilation requires a positive conditioned floor area.")
 
         static = {
             "infiltration": (
@@ -405,6 +412,7 @@ class ThermalSimulation(HourlySimulation):
             "solar_altitude": array(self.solar_irradiation.solar_altitude.values),
             "dry_bulb_temp": array(self.dry_bulb_temp.values),
             "wind_speed": array(self.wind_speed.values),
+            "passive_stack_opening_factor": opening_factor,
             "ventilation_air_supply_rate": array(
                 self.ventilation.air_supply_rate.values
             ),
@@ -526,6 +534,17 @@ class ThermalSimulation(HourlySimulation):
                 sa_details["sa_applied_m3_h"] / indoor_volume
             )
 
+        passive_airflow = passive_stack_airflow_m3_h(
+            self._cache["passive_stack_opening_factor"],
+            None if prev_row is None else prev_air_free_temp,
+            dry_bulb_temp,
+        )
+        passive_specific_flow = (
+            passive_airflow / self.geometry.conditioned_floor_area
+            if passive_airflow
+            else 0.0
+        )
+
         """
         4. Air flow [Hourly simulation column JZ]
         """
@@ -534,6 +553,7 @@ class ThermalSimulation(HourlySimulation):
             + air_flow_dependent
             + air_flow_base
             + sheltair_specific_flow
+            + passive_specific_flow
         )
 
         """
@@ -698,6 +718,10 @@ class ThermalSimulation(HourlySimulation):
             "night_ventilation_enabled": night_ventilation_enabled,
             "air_flow_dependent": air_flow_dependent,
             "air_flow": air_flow,
+            "passive_stack_airflow_m3_h": passive_airflow,
+            "_natural_outdoor_airflow": air_flow_base
+            + air_flow_dependent
+            + passive_specific_flow,
             "heat_transmission_by_ventilation": heat_transmission_by_ventilation,
             "htr_1": htr_1,
             "htr_2": htr_2,
@@ -911,6 +935,40 @@ class ThermalSimulation(HourlySimulation):
             self._hours["relative_humidity"] = relative_humidity
         return self._hours["relative_humidity"]
 
+    # Adding new property for indoor moisture
+    @property
+    def indoor_moisture(self) -> DataFrame:
+        """Hourly humidity ratios (kg/kg dry air) and indoor relative humidity (%)."""
+        return self.indoor_moisture_at_temperature(self.air_free_temp_hc_actual)
+
+    def indoor_moisture_at_temperature(
+        self, indoor_temperature: "Series[float]"
+    ) -> DataFrame:
+        """Calculate moisture using the supplied indoor temperature series."""
+        area = self.geometry.conditioned_floor_area
+
+        # Infiltration and background ventilation are per m². SheltAir is in m³/h.
+        physical_flow = (
+            self._hours["_natural_outdoor_airflow"] * area
+            + self._hours["sa_applied_m3_h"]
+        )
+
+        # Add rated mechanical outdoor air in the hours each system runs.
+        # Use the flow before the sensible heat recovery adjustment.
+        for system in self.ventilation.ventilation_simulations:
+            physical_flow += system.airflow * system.ventilation_on
+
+        self._hours["outdoor_airflow_m3h"] = physical_flow
+        outdoor_airflow = self._hours["outdoor_airflow_m3h"]
+
+        return calculate_indoor_moisture(
+            weather=self.location.epw_data,
+            indoor_temperature=indoor_temperature,
+            outdoor_airflow=outdoor_airflow,
+            indoor_air_volume=area * self.spec.floor_to_ceiling_height,
+        )
+
+
     @property
     def wet_bulb_temp(self) -> "Series[float]":
         """Wet bulb temperature for each hour of the year.
@@ -1005,6 +1063,11 @@ class ThermalSimulation(HourlySimulation):
         qv,inf [Hourly simulation column JH]
         """
         return self._hours["air_flow_dependent"]
+
+    @property
+    def passive_stack_airflow_m3_h(self) -> "Series[float]":
+        """Hourly outdoor air exchange through the specified passive openings."""
+        return self._hours["passive_stack_airflow_m3_h"]
 
     @property
     def air_flow(self) -> "Series[float]":
@@ -1802,6 +1865,7 @@ def specs_require_thermal_rerun(old_spec: OpenBESSpecification, new_spec: OpenBE
     thermal_params = [
         'leakage_air_flow_independent',
         'natural_ventilation_night',
+        'passive_openings',
         'terrain_class',
         'setpoint_winter_day',
         'setpoint_winter_night',

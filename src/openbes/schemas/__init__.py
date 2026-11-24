@@ -1,6 +1,8 @@
 import json
 from importlib.resources import files
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from .generated.models import (
     Ballast,
     BuildingEnergySimulationOutput,
@@ -30,11 +32,11 @@ from .generated.models import (
     METEOROLOGICALFILE,
     ModelValidation,
     Month,
-    OpenBESCase,
+    OpenBESCase as _GeneratedCase,
     OpenBESMetaData,
     OpenBESOutput,
     OpenBESParameters as OpenBESParametersV2,
-    OpenBESSpecification as OpenBESSpecificationV2,
+    OpenBESSpecification as _GeneratedSpecification,
     OccupationSchedule,
     Range,
     SpaceThermalDemandResult,
@@ -47,7 +49,29 @@ from .generated.models import (
     Zone,
     ZoneSimultaneity,
 )
-from .conversion import toml_to_json, json_to_toml
+
+
+class PassiveOpening(BaseModel):
+    """A fixed opening to outdoor air for stack ventilation."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+
+    opening_id: str = Field(pattern=r"\S")
+    centre_height_m: float = Field(ge=0)
+    free_area_m2: float = Field(ge=0)
+    discharge_coefficient: float = Field(default=0.6, gt=0, le=1)
+
+
+class OpenBESSpecificationV2(_GeneratedSpecification):
+    passive_openings: list[PassiveOpening] | None = None
+
+
+class OpenBESCase(_GeneratedCase):
+    inputs: OpenBESSpecificationV2 | _GeneratedSpecification
+
+
+# Conversion imports the public specification type.
+from .conversion import toml_to_json, json_to_toml  # noqa: E402
 
 with open(str(files("openbes.schemas") / "OpenBES.schema.json"), "r") as json_file:
     SPECIFICATION = json.load(json_file)
@@ -88,6 +112,7 @@ __all__ = [
     "OpenBESParametersV2",
     "OpenBESSpecificationV2",
     "OccupationSchedule",
+    "PassiveOpening",
     "Range",
     "SpaceThermalDemandResult",
     "SUPPORTEDCOUNTRIES",

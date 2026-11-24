@@ -1,0 +1,341 @@
+{
+  "specification": {
+    "parameters": {
+      "cooling_load_factor": 1,
+      "density_of_air": 1.211,
+      "facade_absorption_coefficient": 0.65,
+      "facade_correction_factor": 1,
+      "facade_emissivity": 0.24,
+      "floor_correction_factor": 1,
+      "heat_capacity_correction_factor": 1,
+      "heat_capacity_joule": 42166.666666666664,
+      "heating_load_factor": 1,
+      "infiltration_correction_factor": 1,
+      "leakage_air_flow_dependent": 11.687,
+      "nia_gba_ratio": 1,
+      "roof_absorption_coefficient": 0.65,
+      "roof_correction_factor": 1,
+      "roof_emissivity": 0.24,
+      "shading_correction_factor": 1,
+      "specific_heat_of_air": 1.015,
+      "view_factor_to_sky_facade": 0.5,
+      "view_factor_to_sky_roof": 1,
+      "window_correction_factor": 1,
+      "include_lighting": false,
+      "include_occupancy": false,
+      "include_appliances": false,
+      "window_angular_correction_factors": [
+        1,
+        -0.193,
+        0.656,
+        -0.608,
+        0.004
+      ]
+    },
+    "appliances_load": 0,
+    "holiday": true,
+    "leakage_air_flow": 0,
+    "leakage_air_flow_independent": 0,
+    "lighting_control": "Manual",
+    "lighting_simultaneity_factor": 0.1,
+    "max_building_occupation": 0,
+    "natural_ventilation_night": 0,
+    "typical_occupation": 3,
+    "fec_coefficients": "Other",
+    "heat_capacity": "Medium",
+    "lighting_active_hours": {
+      "start": 16,
+      "end": 22
+    },
+    "meteorological_file_path": "openbes://z-azraq.epw",
+    "setpoint_temperature_day": {
+      "min": 24,
+      "max": 20
+    },
+    "setpoint_temperature_night": {
+      "min": 24,
+      "max": 18
+    },
+    "building": {
+      "area": "Azraq refugee camp, Jordan",
+      "height": 3.3,
+      "length": 6.1,
+      "width": 4.1,
+      "name": "Azraq S05 Increased Ventilation",
+      "type": "Shelter",
+      "floor_to_ceiling_height": 2.1,
+      "slab_thickness": 0.1,
+      "orientation_angle": 180,
+      "roof_angle": 53.66,
+      "solar_external_shading_summer": 1,
+      "solar_external_shading_winter": 1,
+      "terrain_class": "Open terrain",
+      "thermal_bridge_facade_ground": false,
+      "thermal_bridge_facade_intermediate": false,
+      "thermal_bridge_facade_roof": false,
+      "thermal_bridge_shading": false,
+      "thermal_bridge_window": false,
+      "uvalue_facade": 1.38,
+      "uvalue_roof": 1.46,
+      "uvalue_window": 5.77,
+      "uvalue_floor": 1.4,
+      "window_frame_factor": 0,
+      "window_gvalue": 0.84,
+      "window_height": 1,
+      "window_length": 0.5,
+      "window_counts": {
+        "front": [
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        "right": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "back": [
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        "left": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "floor_count": 1
+    },
+    "passive_openings": [
+      {
+        "opening_id": "low_vent_01",
+        "centre_height_m": 0.2,
+        "free_area_m2": 0.007854,
+        "discharge_coefficient": 0.6
+      },
+      {
+        "opening_id": "low_vent_02",
+        "centre_height_m": 0.2,
+        "free_area_m2": 0.007854,
+        "discharge_coefficient": 0.6
+      },
+      {
+        "opening_id": "low_vent_03",
+        "centre_height_m": 0.2,
+        "free_area_m2": 0.007854,
+        "discharge_coefficient": 0.6
+      },
+      {
+        "opening_id": "low_vent_04",
+        "centre_height_m": 0.2,
+        "free_area_m2": 0.007854,
+        "discharge_coefficient": 0.6
+      },
+      {
+        "opening_id": "roof_cowl_01",
+        "centre_height_m": 3.0,
+        "free_area_m2": 0.007854,
+        "discharge_coefficient": 0.6
+      },
+      {
+        "opening_id": "roof_cowl_02",
+        "centre_height_m": 3.0,
+        "free_area_m2": 0.007854,
+        "discharge_coefficient": 0.6
+      },
+      {
+        "opening_id": "roof_cowl_03",
+        "centre_height_m": 3.0,
+        "free_area_m2": 0.007854,
+        "discharge_coefficient": 0.6
+      },
+      {
+        "opening_id": "roof_cowl_04",
+        "centre_height_m": 3.0,
+        "free_area_m2": 0.007854,
+        "discharge_coefficient": 0.6
+      }
+    ],
+    "zones": [
+      {
+        "name": "Home",
+        "areas": [
+          25.01,
+          0,
+          0,
+          0,
+          0
+        ],
+        "conditioned": true,
+        "active_hours": {
+          "start": 1,
+          "end": 24
+        }
+      }
+    ],
+    "occupation_schedule": {
+      "January": true,
+      "February": true,
+      "March": true,
+      "April": true,
+      "May": true,
+      "June": true,
+      "July": true,
+      "August": true,
+      "September": true,
+      "October": true,
+      "November": true,
+      "December": true,
+      "Monday": true,
+      "Tuesday": true,
+      "Wednesday": true,
+      "Thursday": true,
+      "Friday": true,
+      "Saturday": true,
+      "Sunday": true
+    }
+  },
+  "scenarios": [
+    {
+      "name": "Roof shading",
+      "interventions": [
+        {
+          "type": "roof_shading",
+          "solar_factor": 0.5
+        }
+      ]
+    },
+    {
+      "name": "South wall shading",
+      "interventions": [
+        {
+          "type": "wall_shading",
+          "solar_factor": 0.5,
+          "compass_points": [
+            "South"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Scheduled window overhang",
+      "interventions": [
+        {
+          "type": "window_overhang",
+          "window_ids": [
+            "ground_front_01"
+          ],
+          "projection_m": 0.6,
+          "gap_m": 0.2,
+          "closed_schedule": {
+            "intervals": [
+              [
+                10,
+                18
+              ]
+            ],
+            "months": [
+              5,
+              6,
+              7,
+              8,
+              9
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Single-opening ventilation (wind)",
+      "interventions": [
+        {
+          "type": "single_opening_ventilation",
+          "window_id": "ground_front_01",
+          "max_free_area_m2": 0.2,
+          "opening_height_m": 1,
+          "driving_force": "wind",
+          "local_wind_factor": 0.82,
+          "opening_fraction": 1,
+          "open_above_c": 24,
+          "close_below_c": 23,
+          "min_cooling_difference_c": 1,
+          "open_from_hour": 9,
+          "open_until_hour": 21
+        }
+      ]
+    },
+    {
+      "name": "Single-opening ventilation (buoyancy)",
+      "interventions": [
+        {
+          "type": "single_opening_ventilation",
+          "window_id": "ground_front_01",
+          "max_free_area_m2": 0.2,
+          "opening_height_m": 1,
+          "driving_force": "buoyancy",
+          "local_wind_factor": 0.82,
+          "opening_fraction": 1,
+          "open_above_c": 24,
+          "close_below_c": 23,
+          "min_cooling_difference_c": 1,
+          "open_from_hour": 9,
+          "open_until_hour": 21
+        }
+      ]
+    },
+    {
+      "name": "Wind-driven cross-ventilation",
+      "interventions": [
+        {
+          "type": "cross_ventilation",
+          "window_ids": [
+            "ground_front_01",
+            "ground_back_01"
+          ],
+          "max_free_areas_m2": [
+            0.2,
+            0.2
+          ],
+          "centre_height_difference_m": 0,
+          "driving_force": "wind",
+          "reference_wind_factor": 0.82,
+          "delta_cp": 1.2,
+          "opening_fraction": 1,
+          "open_above_c": 24,
+          "close_below_c": 23,
+          "min_cooling_difference_c": 1,
+          "open_from_hour": 9,
+          "open_until_hour": 21
+        }
+      ]
+    },
+    {
+      "name": "Single-sided buoyancy (front door and window)",
+      "interventions": [
+        {
+          "type": "single_sided_two_opening_ventilation",
+          "max_free_areas_m2": [
+            2.1,
+            0.2
+          ],
+          "centre_height_difference_m": 0.6,
+          "opening_fraction": 1,
+          "open_above_c": 24,
+          "close_below_c": 23,
+          "min_cooling_difference_c": 1,
+          "open_from_hour": 9,
+          "open_until_hour": 21
+        }
+      ]
+    }
+  ]
+}

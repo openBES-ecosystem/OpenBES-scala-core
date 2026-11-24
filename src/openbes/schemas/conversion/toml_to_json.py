@@ -491,6 +491,10 @@ def toml_to_json(toml: dict | Path | str, allow_warnings: bool = True) -> dict:
     if ventilation_systems:
         out["ventilation_systems"] = ventilation_systems
 
+    passive_openings = get("passive_openings")
+    if passive_openings is not None:
+        out["passive_openings"] = passive_openings
+
     # ── lighting systems ───────────────────────────────────────────────────────
     lighting_systems = []
     for i in range(1, 7):

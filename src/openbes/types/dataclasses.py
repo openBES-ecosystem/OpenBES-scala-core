@@ -21,6 +21,7 @@ from .enums import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from ..schemas import PassiveOpening
     from ..schemas.generated.models import CustomFECCoefficients, FECCoefficients
 
 
@@ -506,6 +507,7 @@ class OpenBESSpecification:
     zone_name_z3: Optional[float] = None
     zone_name_z4: Optional[float] = None
     zone_name_z5: Optional[float] = None
+    passive_openings: tuple["PassiveOpening", ...] = ()
 
     def __post_init__(self):
         super().__init__()
@@ -516,6 +518,19 @@ class OpenBESSpecification:
             self.parameters, OpenBESParameters
         ):
             self.parameters = OpenBESParameters(**self.parameters)
+        if self.passive_openings:
+            from ..schemas import PassiveOpening
+
+            self.passive_openings = tuple(
+                PassiveOpening.model_validate(opening)
+                for opening in self.passive_openings
+            )
+            if len({opening.opening_id for opening in self.passive_openings}) != len(
+                self.passive_openings
+            ):
+                raise ValueError("Passive opening IDs must be unique.")
+        else:
+            self.passive_openings = ()
         for f in self.__dataclass_fields__.values():
             value = getattr(self, f.name)
             cls = f.metadata.get("cls", None)

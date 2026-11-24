@@ -13,7 +13,10 @@ from .window_overhang import ScheduledWindowShade
 
 from .sheltair_ventilation import SheltAirSingleOpening
 
-from .sheltair_cross_ventilation import SheltAirCrossVentilation
+from .sheltair_cross_ventilation import (
+    SheltAirCrossVentilation,
+    SheltAirSingleSidedTwoOpenings,
+)
 
 @dataclass
 class ScenarioInputs:
@@ -43,8 +46,11 @@ class ScenarioInputs:
         default_factory=list
     )
     sheltair_ventilation: (
-            SheltAirSingleOpening | SheltAirCrossVentilation | None
-    ) = None # none means additional wind ventilation model is disabled
+        SheltAirSingleOpening
+        | SheltAirCrossVentilation
+        | SheltAirSingleSidedTwoOpenings
+        | None
+    ) = None
 
 class Intervention(Protocol):
     """An intervention must provide an apply() method

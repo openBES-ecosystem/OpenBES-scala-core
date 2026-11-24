@@ -1,4 +1,4 @@
-"""SheltAir cross-ventilation, equations 4-7 as printed.
+"""SheltAir two-opening ventilation, equations 3-7 as printed.
 
 Source: Conzatti et al. (2026), Indoor Environments 3, 100154.
 DOI: 10.1016/j.indenv.2026.100154, section 2.1.1, page 3.
@@ -10,12 +10,14 @@ Wind and buoyancy candidates are evaluated separately, without max() or addition
 
 from __future__ import annotations
 
-from math import isfinite, sqrt
+from math import hypot, isfinite, sqrt
 from typing import TYPE_CHECKING
 
 from ..interventions.sheltair_cross_ventilation import (
     SheltAirCrossVentilation,
+    SheltAirSingleSidedTwoOpenings,
 )
+from .sheltair_ventilation import empty_sheltair_details
 
 if TYPE_CHECKING:
     from .window_shading import WindowGeometry
@@ -94,22 +96,11 @@ def cross_wind_flow_m3_s(
     )
 
 
-def cross_buoyancy_flow_m3_s(
-        area_1_m2: float,
-        area_2_m2: float,
+def _stack_velocity_m_s(
         centre_height_difference_m: float,
         indoor_temp_c: float,
         outdoor_temp_c: float,
 ) -> float:
-    """Equations 6-7 as printed, using temperature-difference magnitude.
-
-    Qb = 0.6 * Ab * sqrt(
-        g * hd * abs(Tin - Tout) / (Tmean + 273)
-    )
-
-    This reproduces the paper's Ab and prefactor.
-    """
-
     if not all(
             isfinite(v)
             for v in (
@@ -131,29 +122,57 @@ def cross_buoyancy_flow_m3_s(
             "using the paper's offset."
         )
 
-    _, area_buoyancy = equivalent_areas_m2(
-        area_1_m2,
-        area_2_m2,
-    )
-
     mean_temperature_k = (
             (indoor_temp_c + outdoor_temp_c) / 2.0
             + PAPER_KELVIN_OFFSET
     )
 
-    return (
-            DISCHARGE_COEFFICIENT
-            * area_buoyancy
-            * sqrt(
+    return sqrt(
         GRAVITY_M_S2
         * centre_height_difference_m
         * abs(indoor_temp_c - outdoor_temp_c)
         / mean_temperature_k
     )
+
+
+def cross_buoyancy_flow_m3_s(
+    area_1_m2: float,
+    area_2_m2: float,
+    centre_height_difference_m: float,
+    indoor_temp_c: float,
+    outdoor_temp_c: float,
+) -> float:
+    """Equations 6-7 as printed, using temperature-difference magnitude."""
+    velocity = _stack_velocity_m_s(
+        centre_height_difference_m, indoor_temp_c, outdoor_temp_c
     )
+    _, area_buoyancy = equivalent_areas_m2(area_1_m2, area_2_m2)
+    return DISCHARGE_COEFFICIENT * area_buoyancy * velocity
 
 
-class SheltAirCrossVentilationModel:
+def single_sided_two_opening_flow_m3_s(
+    lower_area_m2: float,
+    upper_area_m2: float,
+    centre_height_difference_m: float,
+    indoor_temp_c: float,
+    outdoor_temp_c: float,
+) -> float:
+    """Same-façade buoyancy from SheltAir equation 3 as printed."""
+    velocity = _stack_velocity_m_s(
+        centre_height_difference_m, indoor_temp_c, outdoor_temp_c
+    )
+    if not all(isfinite(area) and area >= 0 for area in (lower_area_m2, upper_area_m2)):
+        raise ValueError("Opening areas must be finite and non-negative.")
+    if lower_area_m2 == 0 or upper_area_m2 == 0:
+        return 0.0
+
+    # After cancelling (1 + epsilon), the area term is A1 / (1 + epsilon²).
+    area_ratio = upper_area_m2 / hypot(lower_area_m2, upper_area_m2)
+    effective_area = lower_area_m2 * area_ratio**2
+    return DISCHARGE_COEFFICIENT * effective_area * sqrt(2.0) * velocity
+
+
+class SheltAirTwoOpeningModel:
     """One pair of openings with independent state for each thermal run.
 
     The calculate() signature and common sa_* diagnostics match the existing
@@ -162,11 +181,14 @@ class SheltAirCrossVentilationModel:
 
     def __init__(
             self,
-            settings: SheltAirCrossVentilation,
-            windows: tuple[WindowGeometry, ...],
+            settings: SheltAirCrossVentilation | SheltAirSingleSidedTwoOpenings,
+            windows: tuple[WindowGeometry, ...] = (),
     ):
         self.settings = settings
         self._is_open = False
+
+        if isinstance(settings, SheltAirSingleSidedTwoOpenings):
+            return
 
         lookup = {
             w.window_id: w
@@ -254,30 +276,25 @@ class SheltAirCrossVentilationModel:
                 "Expected month 1-12 and hour midpoint in [0, 24)."
             )
 
-        reference_wind = (
-                weather_wind_speed_m_s
-                * settings.reference_wind_factor
-        )
-
-        if not isfinite(reference_wind):
-            raise ValueError(
-                "Calculated reference wind speed is not finite."
-            )
-
-        result = {
-            "sa_opening_fraction": 0.0,
-            "sa_cross_area_1_m2": 0.0,
-            "sa_cross_area_2_m2": 0.0,
-            "sa_cross_wind_area_m2": 0.0,
-            "sa_cross_buoyancy_area_m2": 0.0,
-            "sa_reference_wind_m_s": reference_wind,
-            "sa_wind_candidate_m3_h": 0.0,
-            "sa_buoyancy_candidate_m3_h": 0.0,
-            "sa_applied_m3_h": 0.0,
-
-            # Filled from building volume by the existing thermal hook.
-            "sa_ach": 0.0,
-        }
+        if isinstance(settings, SheltAirCrossVentilation):
+            reference_wind = weather_wind_speed_m_s * settings.reference_wind_factor
+            if not isfinite(reference_wind):
+                raise ValueError("Calculated reference wind speed is not finite.")
+            result = {
+                "sa_opening_fraction": 0.0,
+                "sa_cross_area_1_m2": 0.0,
+                "sa_cross_area_2_m2": 0.0,
+                "sa_cross_wind_area_m2": 0.0,
+                "sa_cross_buoyancy_area_m2": 0.0,
+                "sa_reference_wind_m_s": reference_wind,
+                "sa_wind_candidate_m3_h": 0.0,
+                "sa_buoyancy_candidate_m3_h": 0.0,
+                "sa_applied_m3_h": 0.0,
+                "sa_ach": 0.0,
+            }
+        else:
+            result = empty_sheltair_details()
+            result.update(sa_lower_open_area_m2=0.0, sa_upper_open_area_m2=0.0)
 
         # No previous indoor temperature means closed.
         if indoor_temp_c is None:
@@ -334,6 +351,21 @@ class SheltAirCrossVentilationModel:
             for a in settings.max_free_areas_m2
         )
 
+        if isinstance(settings, SheltAirSingleSidedTwoOpenings):
+            buoyancy_flow = 3600.0 * single_sided_two_opening_flow_m3_s(
+                area_1, area_2, settings.centre_height_difference_m,
+                indoor_temp_c, outdoor_temp_c,
+            )
+            result.update(
+                sa_opening_fraction=settings.opening_fraction,
+                sa_open_area_m2=area_1 + area_2,
+                sa_lower_open_area_m2=area_1,
+                sa_upper_open_area_m2=area_2,
+                sa_buoyancy_candidate_m3_h=buoyancy_flow,
+                sa_applied_m3_h=buoyancy_flow,
+            )
+            return result
+
         area_wind, area_buoyancy = equivalent_areas_m2(
             area_1,
             area_2,
@@ -376,3 +408,6 @@ class SheltAirCrossVentilationModel:
         )
 
         return result
+
+
+SheltAirCrossVentilationModel = SheltAirTwoOpeningModel
